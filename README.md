@@ -1,5 +1,11 @@
 # WalnutEverMemFoundation
 
+> ⚠️ **WARNING: This project is currently in the engineering testing phase.**
+> 
+> **Please do NOT download or use it at this time. It is NOT functional yet.**
+> 
+> This repository is under active development and will be announced when ready for use.
+
 A binary-logic based infinite context memory foundation for LLMs, serving as an AI memory OS that requires Skill modules for practical use.
 
 ## Purpose
