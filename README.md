@@ -19,7 +19,7 @@ Core/
 │   │   ├── src/walnut_ever_mem/
 │   │   ├── tests/
 │   │   └── pyproject.toml
-│   └── node/            # Node.js/TypeScript implementation
+│   └── nodejs/          # Node.js/TypeScript implementation
 │       ├── src/
 │       ├── package.json
 │       └── tsconfig.json
