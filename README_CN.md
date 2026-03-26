@@ -8,221 +8,116 @@
 
 基于二元逻辑的 LLM 无限上下文记忆基础架构，作为 AI 记忆操作系统使用，需要配合 Skill 模块实现具体功能。
 
-## 目的
+## 项目结构
 
-当前 AI 系统缺乏无限上下文能力。然而人类同样没有无限上下文——是什么让我们能够表现得好像拥有它？答案在于外部记录：聊天历史、文档、笔记。我们通过比对、检索和浏览实现了"无限上下文"。
-
-然而，现有的记忆框架嵌入了强烈的主观偏见：
-
-- **人类主观性**：人工设计的层级、任意的分类、预设的板块划分
-- **AI 主观性**：在存储前将消息预处理为结构化格式
-
-这些方法在早期能快速见效，但泛化性很差。它们从外部强加结构，而非让结构从内部涌现。
-
-## 设计理念
-
-**结构应该是环境的映射，而非主观设计的产物。**
-
-如果我们移除所有主观设计，检索就需要从第一条记录扫描到最后一条——准确但极其缓慢。缓慢源于无效劳动：每次查询都重复完整扫描，即使是相同的问题。
-
-解决方案在经典计算机科学中早已存在：**记忆化搜索**。这一概念在数学表达中也体现为**动态规划**。
-
-核心洞见：记录在使用中生成，因此与环境内在绑定。当环境稳定时，生成的树状索引成为可能达到的最高效、最精准的索引。
-
-### 如果环境发生剧变怎么办？
-
-系统有保底机制：如果现有索引无法定位所需信息，它会回退到全量顺序搜索。变慢了，但不会变弱。
-
-这符合物理规律：当遇到真正陌生的环境时，过去的经验怎么可能立即产生结果？如果过去的经验确实能立即产生结果，那只能说明环境并没有太大变化。
-
-## 理论基础：二元逻辑
-
-所有逻辑都可以表示为二元逻辑。因此，任何计算问题都可以通过中间记忆与记忆库中的记忆进行两两比对来解决。
-
-然而，将多元逻辑转换为二元逻辑需要转换过程——并非所有事情都能直接用二元逻辑解决。这个转换过程正是 **AI 在记忆层面的学习过程**。
-
-### 学习，而非微调
-
-这种学习与基于梯度的微调有本质区别：
-
-- AI 通过将示范和案例积累到记忆结构中来学习
-- 它学习如何将外部检索问题转化为内部二元结构检索问题
-- 学习通过语言层面的探索进行：直接教授或通过实验自我发现
-
-### 无需梯度下降
-
-给定这个机制，AI 能够自己找到实现二元逻辑转换的路径。更重要的是：
-
-- 通过反复教授和使用过程中的指导，自然的树状结构和检索结构会涌现
-- 不需要梯度下降——人类经验的直接传递
-- 结构是交互的自然产物，而非优化的结果
-
-### 这是一次初步探索
-
-我们不知道最终结果如何，但至少能得到一个无限上下文的 AI 记忆工具。根据二元逻辑原理，只要教授得足够好，它应该能够工作。
-
-### 未来展望
-
-当前的树状索引可能有优化空间。自然界中的检索结构可能是图结构或其他形式——这仍是一个有待探索的开放问题。
-
-## 系统架构
-
-### 基础存储：顺序聊天记录
-
-基础是聊天记录的顺序存储——原始记忆流。无预处理，无分类。记录以其原本发生的形式存在。
-
-### 工作空间记忆
-
-**注意**：工作空间记忆不属于本系统。本基座仅提供无限上下文的存储和检索。调用方如何使用它——作为工作空间记忆、用户上下文或其他——是外部问题。
-
-本基座仅提供：
-- 创建新的上下文流（通过 `session_id`）
-- 向流中追加记录
-- 通过指针增强的检索获取相关记录
-
-### 检索过程：两两比对
-
-系统通过将工作空间记忆与聊天记录顺序比对来查找信息：
+本仓库包含同一规范的多个实现版本：
 
 ```
-查询："我昨天说想去哪旅游来着？"
-    ↓
-当前记录 → 比对 → 未找到 → 上一条记录
-    ↓
-比对 → 找到 → 生成指针
+Core/
+├── implementations/
+│   ├── python/          # Python 实现
+│   │   ├── src/walnut_ever_mem/
+│   │   ├── tests/
+│   │   └── pyproject.toml
+│   └── node/            # Node.js/TypeScript 实现
+│       ├── src/
+│       ├── package.json
+│       └── tsconfig.json
+├── SPEC.md              # 系统规范（唯一真实来源）
+├── README.md            # 本文件
+└── README_CN.md         # 中文版
 ```
 
-### 指针机制：树的涌现
+## 实现版本
 
-当找到目标时，在当前位置创建一个**指针**，指向目标记录。后续相关查询：
+### Python 版本
 
-1. 遇到指针
-2. 直接跳转到目标
-3. 跳过中间记录
+- **位置**: `implementations/python/`
+- **包名**: `walnut-ever-mem`
+- **要求**: Python 3.10+
+- **依赖**: pydantic, aiosqlite, asyncpg, numpy, fastapi
 
-多个这样的指针形成**树状结构**——索引从成功的检索中涌现。
-
-### 检索算法
-
-```
-在每个节点：
-  1. 检查该位置的聊天记录
-  2. 检查该节点存储的所有快速指针
-  3. 继续向前顺序检索
+**安装:**
+```bash
+cd implementations/python
+pip install -e .
 ```
 
-**最好情况**：指针链直接指向目标  
-**最坏情况**：退化为全量顺序扫描
+**快速开始:**
+```bash
+# 交互式 CLI
+walnut-init
 
-### 遗留问题
+# Web API
+walnut-server
 
-- **指针失效**：环境变化时，某些指针可能过时。清理机制尚未设计。
-- **指针表示**：多种形式可选：
-  - **摘要指针**：目标内容的文本摘要
-  - **嵌入指针**：目标的向量表示
-
-谁的泛化能力更强？对于较弱的 AI，嵌入可能泛化更好。对于较强的 AI，摘要可能让模型自行泛化。这仍是一个开放问题。
-
-**当前选择**：基于 Embedding 的指针。
-
-### 实现
-
-- **存储**：关系数据库（记录本质上是文本）
-- **索引**：嵌入向量用于指针表示
-
-### 数据库结构
-
-```sql
--- 聊天记录：顺序记忆流
-CREATE TABLE chat_records (
-    id              BIGSERIAL PRIMARY KEY,
-    session_id      VARCHAR(64) NOT NULL,
-    role            VARCHAR(16) NOT NULL,      -- 'user' | 'assistant' | 'system'
-    content         TEXT NOT NULL,
-    embedding       VECTOR(1536),              -- 内容嵌入（可选）
-    created_at      TIMESTAMP DEFAULT NOW(),
-    metadata        JSONB                      -- 可扩展元数据
-);
-
--- 指针：涌现的树状结构
-CREATE TABLE pointers (
-    id              BIGSERIAL PRIMARY KEY,
-    source_id       BIGINT NOT NULL REFERENCES chat_records(id),
-    target_id       BIGINT NOT NULL REFERENCES chat_records(id),
-    embedding       VECTOR(1536) NOT NULL,     -- 指针嵌入用于匹配
-    pointer_type    VARCHAR(32) DEFAULT 'embedding',  -- 'embedding' | 'summary'
-    summary         TEXT,                      -- 摘要型指针的内容
-    relevance_score FLOAT,                     -- 创建时的相关度
-    created_at      TIMESTAMP DEFAULT NOW(),
-    access_count    INT DEFAULT 0,             -- 用于清理启发式
-    last_accessed   TIMESTAMP
-);
-
--- 高效检索索引
-CREATE INDEX idx_chat_records_session ON chat_records(session_id);
-CREATE INDEX idx_chat_records_created ON chat_records(created_at DESC);
-CREATE INDEX idx_pointers_source ON pointers(source_id);
-CREATE INDEX idx_pointers_target ON pointers(target_id);
+# 库引入
+from walnut_ever_mem import WalnutConfig, MemoryService
 ```
 
-### 实体关系
+### Node.js/TypeScript 版本
 
-```
-┌─────────────────┐         ┌─────────────────┐
-│  chat_records   │         │    pointers     │
-├─────────────────┤         ├─────────────────┤
-│ id (PK)         │◄────────│ source_id (FK)  │
-│ session_id      │         │ target_id (FK)  │──► chat_records.id
-│ role            │         │ embedding       │
-│ content         │         │ pointer_type    │
-│ embedding       │         │ access_count    │
-│ created_at      │         └─────────────────┘
-└─────────────────┘
-```
+- **位置**: `implementations/node/`
+- **包名**: `walnut-ever-mem`
+- **要求**: Node.js 18+
+- **依赖**: zod, better-sqlite3, pg, express, commander
 
-### 说明
-
-- `chat_records`：仅追加，保持时间顺序。通过 `session_id` 支持多个会话。
-- `pointers`：涌现的索引；`source_id` 是指针所在位置，`target_id` 是指针指向位置
-- `VECTOR(1536)`：假设使用 OpenAI 嵌入维度；可根据需要调整
-- 本基座不关心会话如何被使用——工作空间记忆、用户上下文等是外部问题
-
-## 范围：迈向 AGI
-
-本系统解决的是人类可以解决的一切逻辑上能解决的问题。
-
-### 逻辑-统计框架
-
-- **逻辑上可解的问题**：都可以转化为二元问题，我们的系统原生处理
-- **逻辑上不可解的问题**：属于统计学问题。统计学本身可以通过逻辑实现——我们在逻辑控制下构建统计工具，再用这些工具处理逻辑之外的事物
-
-### 通向 AGI 的路径
-
-基于这套无限记忆基座，我们有望在宏观层面上解决人工智能能力靠近 AGI 的问题：
-
-```
-逻辑层（二元操作）
-    ↓
-  控制
-    ↓
-统计工具（处理非逻辑领域）
+**安装:**
+```bash
+cd implementations/node
+npm install
+npm run build
 ```
 
-记忆基座作为逻辑推理积累和自我结构化的基底。统计工具由逻辑构建和调用，将能力扩展到纯逻辑无法触及的领域——这正映射了人类如何使用形式方法来处理不确定性。
+**快速开始:**
+```bash
+# 交互式 CLI
+npx walnut-init
 
-## 核心原则
+# Web API
+npx walnut-server
 
-```
-环境 → 使用 → 记录 → 索引结构
-```
-
-而非：
-
-```
-人类设计 → 预设结构 → 强制索引
+# 库引入
+import { createConfig, MemoryService } from 'walnut-ever-mem';
 ```
 
-索引从交互中涌现，而非从假设中强加。
+## 规范文档
+
+两个实现版本都遵循 `SPEC.md` 中定义的同一系统规范，确保：
+
+- 完全相同的 API 接口
+- 相同的数据模型
+- 一致的行为
+- 跨语言兼容性
+
+## 选择哪个实现？
+
+**选择 Python 如果：**
+- 你在 AI/ML 生态系统中工作
+- 需要丰富的数据科学库
+- 喜欢动态类型
+
+**选择 Node.js 如果：**
+- 你在构建 Web 应用
+- 需要高并发
+- 喜欢 TypeScript 的类型安全
+
+## 开发
+
+### 添加新实现
+
+1. 仔细阅读 `SPEC.md`
+2. 在 `implementations/` 下创建新目录
+3. 遵循相同的 API 结构
+4. 添加与 Python/Node.js 测试模式匹配的测试
+
+### 更新所有实现
+
+修改规范时：
+
+1. 首先更新 `SPEC.md`
+2. 更新所有实现以匹配规范
+3. 确保所有实现的测试都通过
 
 ## 许可证
 
