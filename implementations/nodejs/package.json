@@ -10,11 +10,11 @@
   },
   "scripts": {
     "build": "tsc",
-    "dev": "ts-node src/index.ts",
+    "dev": "ts-node walnut_ever_mem/src/index.ts",
     "test": "jest",
-    "lint": "eslint src --ext .ts",
-    "cli:init": "ts-node src/cli/init.ts",
-    "cli:server": "ts-node src/cli/server.ts"
+    "lint": "eslint walnut_ever_mem/src --ext .ts",
+    "cli:init": "ts-node walnut_ever_mem/src/cli/init.ts",
+    "cli:server": "ts-node walnut_ever_mem/src/cli/server.ts"
   },
   "keywords": [
     "llm",

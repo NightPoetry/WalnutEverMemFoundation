@@ -16,11 +16,13 @@ This repository contains multiple implementations of the same specification:
 Core/
 ├── implementations/
 │   ├── python/          # Python implementation
-│   │   ├── src/walnut_ever_mem/
+│   │   ├── src/
+│   │   │   └── walnut_ever_mem/
 │   │   ├── tests/
 │   │   └── pyproject.toml
 │   └── nodejs/          # Node.js/TypeScript implementation
-│       ├── src/
+│       ├── walnut_ever_mem/
+│       │   └── src/
 │       ├── package.json
 │       └── tsconfig.json
 ├── SPEC.md              # System specification (single source of truth)
@@ -57,14 +59,14 @@ from walnut_ever_mem import WalnutConfig, MemoryService
 
 ### Node.js/TypeScript Version
 
-- **Location**: `implementations/node/`
+- **Location**: `implementations/nodejs/`
 - **Package**: `walnut-ever-mem`
 - **Requirements**: Node.js 18+
 - **Dependencies**: zod, better-sqlite3, pg, express, commander
 
 **Installation:**
 ```bash
-cd implementations/node
+cd implementations/nodejs
 npm install
 npm run build
 ```

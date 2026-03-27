@@ -16,11 +16,13 @@
 Core/
 ├── implementations/
 │   ├── python/          # Python 实现
-│   │   ├── src/walnut_ever_mem/
+│   │   ├── src/
+│   │   │   └── walnut_ever_mem/
 │   │   ├── tests/
 │   │   └── pyproject.toml
 │   └── nodejs/          # Node.js/TypeScript 实现
-│       ├── src/
+│       ├── walnut_ever_mem/
+│       │   └── src/
 │       ├── package.json
 │       └── tsconfig.json
 ├── SPEC.md              # 系统规范（唯一真实来源）
@@ -57,14 +59,14 @@ from walnut_ever_mem import WalnutConfig, MemoryService
 
 ### Node.js/TypeScript 版本
 
-- **位置**: `implementations/node/`
+- **位置**: `implementations/nodejs/`
 - **包名**: `walnut-ever-mem`
 - **要求**: Node.js 18+
 - **依赖**: zod, better-sqlite3, pg, express, commander
 
 **安装:**
 ```bash
-cd implementations/node
+cd implementations/nodejs
 npm install
 npm run build
 ```
