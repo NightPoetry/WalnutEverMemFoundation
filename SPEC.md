@@ -35,11 +35,27 @@ WalnutEverMem is a binary-logic based infinite context memory foundation for LLM
 3. **Session**: Isolated context identified by `session_id`
 4. **Embedding**: Vector representation of content for similarity matching
 
-### Memory Scanning Algorithm
+### Memory Scanning Algorithm (Generation 2)
 
-WalnutEverMem implements a **memory scanning algorithm** with objective indexing principles:
+WalnutEverMem implements the **second generation** of the memory scanning algorithm developed for this project:
 
-**Core Principle**: On-demand retrieval with pairwise comparison and pointer-based optimization.
+**Generation 1 (File-Based)** - Original Implementation:
+- Storage: Markdown files (`memory/YYYY-MM-DD.md`)
+- Matching: Text keyword matching
+- Indexing: Scan result records in files
+- Retrieval: O(n) linear scan through files
+
+**Generation 2 (Database-Based)** - Current Implementation:
+- Storage: SQLite/PostgreSQL with vector support
+- Matching: Vector embedding similarity (RAG)
+- Indexing: Pointer data structure with metadata
+- Retrieval: O(1) pointer jumps + vector search
+
+**Core Insight**: Both generations share identical principles, Gen 2 optimizes implementation:
+- On-demand retrieval → Query-triggered (same principle)
+- Pairwise comparison → Vector similarity (upgraded matching)
+- Scan records → Pointer structure (upgraded storage)
+- Avoid repetition → Pointer optimization (upgraded performance)
 
 **Algorithm Flow**:
 

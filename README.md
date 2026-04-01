@@ -10,13 +10,29 @@ A binary-logic based infinite context memory foundation for LLMs, serving as an 
 
 ## Core Principles
 
-### Memory Scanning Algorithm & Objective Indexing
+### Memory Scanning Algorithm (Generation 2)
 
-WalnutEverMem implements a **memory scanning algorithm** inspired by objective indexing mechanisms:
+WalnutEverMem implements the **second generation** of the memory scanning algorithm:
 
-**Core Idea**: When user queries, the system performs pairwise comparison between the query context and stored memories, creating pointers for future fast jumps.
+**Generation 1 (File-Based)**:
+- Storage: Markdown files
+- Matching: Text keyword matching
+- Indexing: Scan result records in files
+- Retrieval: O(n) linear scan
 
-**Key Mechanisms**:
+**Generation 2 (Database-Based, Current)**:
+- Storage: SQLite/PostgreSQL with vector support
+- Matching: Vector embedding similarity (RAG)
+- Indexing: Pointer data structure with metadata
+- Retrieval: O(1) pointer jumps + vector search
+
+**Key Insight**: Both generations share the **same core principles**, but Gen 2 optimizes the implementation:
+- On-demand retrieval → Query-triggered
+- Pairwise comparison → Vector similarity
+- Scan records → Pointer structure
+- Avoid repetition → Pointer-based optimization
+
+### Key Mechanisms
 
 1. **On-Demand Retrieval** (按需检索)
    - Only triggers when user queries (similar to "scan when concept mentioned")
