@@ -1,0 +1,519 @@
+# 记忆扫描算法实现说明
+
+**版本**: 1.0  
+**创建时间**: 2026-04-01  
+**实现**: WalnutEverMem Foundation
+
+---
+
+## 一、算法原理
+
+### 1.1 核心思想
+
+WalnutEverMem 实现的记忆扫描算法基于以下核心原则：
+
+> **如无必要，勿建索引** - 按需检索，而非预先构建
+
+**关键机制**：
+
+1. **按需检索** (On-Demand Retrieval)
+   - 用户查询时才触发检索
+   - 不预先构建大量索引
+   - 避免索引膨胀和维护成本
+
+2. **两两比对** (Pairwise Comparison)
+   - 查询向量与每条记忆记录逐一比对
+   - 计算余弦相似度作为相关性评分
+   - 基于 RAG 的语义理解，而非表面文本匹配
+
+3. **指针优化** (Pointer Optimization)
+   - 找到相关记忆时，创建指针从起点直达目标
+   - 后续相似查询可直接跳转（O(1) 访问）
+   - 随时间形成高效的树状检索路径
+
+4. **避免重复** (Avoiding Repetition)
+   - 指针作为缓存的检索路径
+   - 访问计数追踪常用路径
+   - 相似查询受益于已创建的指针
+
+### 1.2 算法流程
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ 用户提交查询 (带上下文)                                   │
+└────────────────┬────────────────────────────────────────┘
+                 │
+                 ▼
+┌─────────────────────────────────────────────────────────┐
+│ 1. 提取查询向量 (语义表示)                                 │
+│    query_embedding = embed(query + context)             │
+└────────────────┬────────────────────────────────────────┘
+                 │
+                 ▼
+┌─────────────────────────────────────────────────────────┐
+│ 2. 从最新记录开始，向后扫描                                │
+│    current_record = get_latest(session_id)              │
+└────────────────┬────────────────────────────────────────┘
+                 │
+                 ▼
+         ┌───────────────┐
+         │ 扫描循环开始   │
+         └───────┬───────┘
+                 │
+                 ▼
+    ┌────────────────────────┐
+    │ a. 两两比对             │
+    │    similarity =        │
+    │    cosine_similarity(  │
+    │      query_embedding,  │
+    │      record_embedding  │
+    │    )                   │
+    └────────┬───────────────┘
+             │
+             ▼
+    ┌────────────────┐
+    │ b. 相似度>=阈值？│
+    └────┬───────────┘
+         │
+    ┌────┴────┐
+    │  是     │  否
+    ▼         │
+┌─────────┐   │
+│ 添加到  │   │
+│ 结果集  │   │
+│         │   │
+│ 创建指  │   │
+│ 针 (如  │   │
+│ 果不是  │   │
+│ 起点)   │   │
+└────┬────┘   │
+     │        │
+     └────────┘
+              │
+              ▼
+    ┌────────────────────────┐
+    │ c. 检查当前位置的指针   │
+    │    for pointer in      │
+    │      pointers_at_current│
+    └────────┬───────────────┘
+             │
+             ▼
+    ┌────────────────┐
+    │ d. 指针匹配？   │
+    └────┬───────────┘
+         │
+    ┌────┴────┐
+    │  是     │  否
+    ▼         │
+┌─────────┐   │
+│ 跳转到  │   │
+│ 目标    │   │
+│ (O(1))  │   │
+└────┬────┘   │
+     │        │
+     └────────┘
+              │
+              ▼
+    ┌────────────────────────┐
+    │ e. 移动到前一条记录     │
+    │    current_id =        │
+    │    get_previous(current)│
+    └────────┬───────────────┘
+             │
+             ▼
+         ┌───┴───┐
+         │还有记 │
+         │录？   │
+         └───┬───┘
+             │
+      ┌──────┴──────┐
+      │  是         │  否
+      ▼             │
+  继续循环          │
+                    │
+                    ▼
+         ┌──────────────────┐
+         │ 3. 按相似度排序  │
+         │    返回 top-k    │
+         └──────────────────┘
+```
+
+### 1.3 伪代码
+
+```python
+async def retrieve(query, session_id, query_embedding, max_results=10, threshold=0.7):
+    results = []
+    starting_record = await get_latest(session_id)
+    current_id = starting_record.id
+    visited = set()
+    
+    while current_id and len(results) < max_results:
+        if current_id in visited:
+            break  # 防止循环
+        visited.add(current_id)
+        
+        record = await get_by_id(current_id)
+        
+        # 两两比对：查询向量 ↔ 记录向量
+        similarity = cosine_similarity(query_embedding, record.embedding)
+        
+        if similarity >= threshold:
+            results.append(SearchResult(record, similarity))
+            
+            # 创建指针（记忆优化）
+            if starting_record.id != current_id:
+                await create_pointer(
+                    source_id=starting_record.id,
+                    target_id=current_id,
+                    embedding=query_embedding,
+                    relevance=similarity
+                )
+        
+        # 检查现有指针（快速跳转）
+        pointers = await get_pointers_at_source(current_id)
+        for pointer in pointers:
+            pointer_sim = cosine_similarity(query_embedding, pointer.embedding)
+            if pointer_sim >= threshold:
+                target = await get_by_id(pointer.target_id)
+                if target and target.id not in visited:
+                    results.append(SearchResult(target, pointer_sim, via_pointer=True))
+                    await increment_access_count(pointer.id)
+        
+        # 移动到前一条记录
+        current_id = await get_previous_id(current_id)
+    
+    return sorted(results, by=similarity, descending=True)[:max_results]
+```
+
+---
+
+## 二、与文件扫描算法的对比
+
+### 2.1 相似之处
+
+| 特性 | 文件扫描算法 | WalnutEverMem |
+|------|-------------|---------------|
+| **按需触发** | ✅ 用户提到概念时才扫描 | ✅ 用户查询时才检索 |
+| **扫描记录** | ✅ 记录到"扫描结果"部分 | ✅ 创建指针作为缓存路径 |
+| **避免重复** | ✅ 避免重复扫描相同内容 | ✅ 指针实现 O(1) 跳转 |
+| **客观索引** | ✅ 基于实际查询建立 | ✅ 只为真实查询创建指针 |
+
+### 2.2 优化之处
+
+| 方面 | 文件扫描 | WalnutEverMem | 优势 |
+|------|---------|---------------|------|
+| **存储介质** | Markdown 文件 | SQLite/PostgreSQL | 更快、可扩展 |
+| **匹配方式** | 文本关键词匹配 | 向量相似度 | 语义理解 |
+| **检索速度** | O(n) 线性扫描 | O(1) 指针跳转 + 向量搜索 | 数量级提升 |
+| **索引结构** | 文件中的扫描记录 | 数据库指针表 | 结构化、可查询 |
+| **智能程度** | 表面文本匹配 | 深层语义理解 | 更准确 |
+
+### 2.3 为什么选择数据库 + 向量？
+
+1. **性能优势**
+   - 数据库索引加速查询
+   - 向量相似度支持语义搜索
+   - 指针跳转实现 O(1) 访问
+
+2. **可扩展性**
+   - 支持百万级记忆记录
+   - 分布式数据库部署
+   - 向量数据库优化（如 pgvector）
+
+3. **结构化优势**
+   - 指针带有元数据（访问次数、最后访问时间）
+   - 支持复杂查询和聚合
+   - 事务保证数据一致性
+
+---
+
+## 三、实现细节
+
+### 3.1 两两比对机制
+
+```python
+def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
+    """计算两个向量的余弦相似度"""
+    return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))
+
+# 在检索中应用
+similarity = cosine_similarity(query_embedding, record.embedding)
+if similarity >= threshold:  # 例如 0.7
+    # 找到相关记忆
+    results.append(record)
+```
+
+**关键点**：
+- 归一化点积，范围 [0, 1]
+- 1 表示完全相同，0 表示完全无关
+- 阈值过滤（默认 0.7）平衡召回率和精确率
+
+### 3.2 指针创建机制
+
+```python
+async def _create_pointer(
+    source_id: int,      # 查询起始位置
+    target_id: int,      # 找到的相关记忆
+    query_embedding,     # 查询向量（用于未来匹配）
+    relevance_score: float,
+) -> Pointer | None:
+    # 检查是否已存在相似指针（避免重复）
+    existing = await find_similar_pointers(
+        source_id, query_embedding, threshold=0.95
+    )
+    if existing:
+        return None  # 已有高度相似指针
+    
+    # 创建新指针
+    pointer = Pointer(
+        source_id=source_id,
+        target_id=target_id,
+        embedding=query_embedding,  # 保存查询向量
+        relevance_score=relevance_score,
+    )
+    return await repo.create(pointer)
+```
+
+**指针数据结构**：
+```typescript
+interface Pointer {
+  id: number;
+  source_id: number;     // 指针所在位置
+  target_id: number;     // 指向的目标
+  embedding: number[];   // 创建时的查询向量
+  pointer_type: 'embedding' | 'summary';
+  relevance_score: number;  // 相关性评分
+  access_count: number;  // 访问次数（用于优化）
+  last_accessed: Date;   // 最后访问时间
+}
+```
+
+### 3.3 指针跳转机制
+
+```python
+# 检查当前位置的所有指针
+pointers = await get_pointers_at_source(current_id)
+
+for pointer in pointers:
+    # 计算当前查询与指针的相似度
+    pointer_similarity = cosine_similarity(query_embedding, pointer.embedding)
+    
+    if pointer_similarity >= threshold:
+        # 匹配成功，直接跳转到目标
+        target_record = await get_by_id(pointer.target_id)
+        results.append(SearchResult(
+            record=target_record,
+            score=pointer_similarity,
+            via_pointer=True,  # 标记为指针跳转
+        ))
+        pointer_jumps += 1
+        
+        # 更新访问统计
+        await increment_access_count(pointer.id)
+```
+
+**优势**：
+- O(1) 时间复杂度直达目标
+- 随时间积累，常用路径被优化
+- 访问计数帮助识别重要指针
+
+---
+
+## 四、日志输出示例
+
+### 4.1 典型检索日志
+
+```
+[INFO] Starting memory scan for session user-123, query: '话语映射系统...' (embedding dim: 1536)
+[DEBUG] Match found at record 42: similarity=0.852 (threshold: 0.7)
+[INFO] Created pointer 15: 50 -> 42 (relevance: 0.852)
+[DEBUG] Pointer jump: 30 -> 25 (similarity: 0.789)
+[DEBUG] Pointer jump: 20 -> 10 (similarity: 0.812)
+[INFO] Memory scan complete: scanned=50, found=5, pointer_jumps=2, pointers_created=1
+```
+
+**解读**：
+- 扫描了 50 条记录
+- 找到 5 条相关记忆
+- 2 次指针跳转（快速访问历史）
+- 创建 1 个新指针（为未来优化）
+
+### 4.2 调试信息
+
+启用详细日志后：
+
+```python
+# Python: 设置 logging level 为 DEBUG
+import logging
+logging.basicConfig(level=logging.DEBUG)
+
+# Node.js: 设置 NODE_DEBUG=memory
+NODE_DEBUG=memory node app.js
+```
+
+---
+
+## 五、性能优化
+
+### 5.1 懒加载策略
+
+```python
+class LazyMemoryScanner:
+    def __init__(self):
+        self.loaded_files = {}  # 缓存已加载文件
+        self.max_cache_size = 10
+    
+    async def _scan_file(self, file_path, concept):
+        # 检查缓存
+        if file_path not in self.loaded_files:
+            if len(self.loaded_files) >= self.max_cache_size:
+                # 移除最旧的
+                oldest_key = next(iter(self.loaded_files))
+                del self.loaded_files[oldest_key]
+            
+            # 加载文件
+            with open(file_path, 'r') as f:
+                self.loaded_files[file_path] = f.read()
+        
+        content = self.loaded_files[file_path]
+        # ... 继续扫描
+```
+
+### 5.2 批量扫描
+
+```python
+async def scan_multiple(self, concepts: list, current_date: str) -> dict:
+    """批量扫描多个概念"""
+    results = {}
+    
+    # 先检查缓存
+    cached = [c for c in concepts if c in self.index_cache]
+    uncached = [c for c in concepts if c not in self.index_cache]
+    
+    # 处理缓存概念
+    for concept in cached:
+        results[concept] = self.scan(concept, current_date)
+    
+    # 处理未缓存概念（一次性加载文件）
+    if uncached:
+        today_content = await load_today_file()
+        for concept in uncached:
+            if concept in today_content:
+                result = await _scan_file(today_file, concept)
+                results[concept] = result
+    
+    return results
+```
+
+### 5.3 指针清理
+
+```python
+async def cleanup_unused_pointers(max_age_days=30):
+    """清理长时间未使用的指针"""
+    cutoff = datetime.now() - timedelta(days=max_age_days)
+    
+    unused = await find_pointers(
+        last_accessed < cutoff,
+        access_count == 0
+    )
+    
+    for pointer in unused:
+        await delete_pointer(pointer.id)
+    
+    return len(unused)
+```
+
+---
+
+## 六、使用示例
+
+### 6.1 Python 示例
+
+```python
+from walnut_ever_mem import WalnutConfig, MemoryService, init_database
+
+# 初始化
+config = WalnutConfig()
+await init_database(config)
+
+memory = MemoryService.from_config(config)
+
+# 存储记忆
+await memory.remember("session-1", "user", "我想学习话语映射系统")
+
+# 检索记忆（触发记忆扫描）
+results = await memory.recall(
+    query="话语映射系统是什么？",
+    session_id="session-1",
+    max_results=5
+)
+
+for result in results:
+    print(f"Score: {result.score:.3f}")
+    print(f"Content: {result.record.content}")
+    print(f"Via pointer: {result.via_pointer}")
+    print("---")
+```
+
+### 6.2 Node.js 示例
+
+```typescript
+import { createConfig, MemoryService, initDatabase } from 'walnut-ever-mem';
+
+// 初始化
+const config = createConfig();
+await initDatabase(config);
+
+const memory = new MemoryService(config);
+
+// 存储记忆
+await memory.remember("session-1", "user", "我想学习话语映射系统");
+
+// 检索记忆（触发记忆扫描）
+const results = await memory.recall(
+  "话语映射系统是什么？",
+  "session-1",
+  5
+);
+
+results.forEach(result => {
+  console.log(`Score: ${result.score.toFixed(3)}`);
+  console.log(`Content: ${result.record.content}`);
+  console.log(`Via pointer: ${result.viaPointer}`);
+  console.log('---');
+});
+```
+
+---
+
+## 七、总结
+
+### 7.1 核心优势
+
+1. **按需检索** - 不预先扫描，只在查询时触发
+2. **两两比对** - 查询与记忆逐一比对，确保准确性
+3. **指针优化** - 成功检索创建捷径，未来查询更快
+4. **语义理解** - 向量相似度超越表面文本匹配
+5. **高效性能** - 数据库 + 向量 + 指针，三重优化
+
+### 7.2 适用场景
+
+- AI 助手长期记忆
+- 对话上下文管理
+- 个性化知识积累
+- 智能检索系统
+
+### 7.3 与记忆扫描算法的关系
+
+**WalnutEverMem = 记忆扫描算法 + 数据库优化 + RAG 技术**
+
+- 继承了记忆扫描的核心思想（按需、比对、记录）
+- 使用数据库替代文件存储（性能提升）
+- 使用向量相似度替代文本匹配（智能提升）
+- 使用指针数据结构替代扫描记录（结构化提升）
+
+---
+
+**文档状态**: ✅ 完成  
+**最后更新**: 2026-04-01  
+**维护者**: WalnutEverMem Team

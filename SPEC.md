@@ -35,6 +35,52 @@ WalnutEverMem is a binary-logic based infinite context memory foundation for LLM
 3. **Session**: Isolated context identified by `session_id`
 4. **Embedding**: Vector representation of content for similarity matching
 
+### Memory Scanning Algorithm
+
+WalnutEverMem implements a **memory scanning algorithm** with objective indexing principles:
+
+**Core Principle**: On-demand retrieval with pairwise comparison and pointer-based optimization.
+
+**Algorithm Flow**:
+
+```
+1. User submits query with context
+2. System extracts query embedding (semantic representation)
+3. Starting from latest record, scan backwards:
+   a. Compute pairwise similarity: query_embedding ↔ record_embedding
+   b. If similarity >= threshold:
+      - Add to results
+      - Create pointer from start position to this record (for future jumps)
+   c. Check existing pointers at current position
+   d. If pointer matches query, jump to target (O(1) access)
+4. Return sorted results by relevance
+```
+
+**Key Characteristics**:
+
+- **On-Demand (按需)**: Only retrieves when queried, no pre-computed indexes
+- **Pairwise Comparison (两两比对)**: Query context compared with each memory sequentially
+- **Pointer Creation (留下指针)**: Successful retrievals create shortcuts for future
+- **Emergent Tree (涌现树结构)**: Over time, pointers form efficient retrieval paths
+- **RAG-Based (基于 RAG)**: Uses vector similarity (cosine similarity) for semantic matching
+
+**Comparison with File-Based Memory Scanning**:
+
+| Aspect | Traditional File Scanning | WalnutEverMem |
+|--------|--------------------------|---------------|
+| Storage | Markdown files | Database (SQLite/PostgreSQL) |
+| Matching | Text keyword matching | Vector embedding similarity |
+| Speed | O(n) linear scan | O(1) pointer jumps + vector search |
+| Intelligence | Surface-level text | Deep semantic understanding |
+| Indexing | Scan result records | Pointer data structure with metadata |
+
+**Why This Design?**
+
+- **Database + Vectors**: Faster than file scanning, supports semantic search
+- **Pointer Mechanism**: Implements memoization - successful retrievals optimize future queries
+- **Sequential + Jumps**: Combines thorough scan (sequential) with fast access (pointers)
+- **No Index Bloat**: Only creates pointers for actual queries, not pre-computed
+
 ---
 
 ## Architecture

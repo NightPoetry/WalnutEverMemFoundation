@@ -67,8 +67,14 @@ export class RetrievalService {
     let currentId: number | undefined = startingRecord.id;
     const visitedIds = new Set<number>();
 
+    console.log(
+      `[MemoryScan] Starting scan for session ${sessionId}, ` +
+      `query: '${query.substring(0, 50)}...' (embedding dim: ${queryEmbedding.length})`
+    );
+
     while (currentId !== undefined && results.length < maxResults) {
       if (visitedIds.has(currentId)) {
+        console.warn(`[MemoryScan] Cycle detected at record ${currentId}, stopping`);
         break;
       }
       visitedIds.add(currentId);
@@ -78,14 +84,21 @@ export class RetrievalService {
 
       recordsScanned++;
 
+      // Pairwise similarity comparison: query ↔ record
       const similarity = this.computeSimilarity(queryEmbedding, currentRecord);
+      
       if (similarity >= minSimilarity) {
+        console.debug(
+          `[MemoryScan] Match found at record ${currentId}: ` +
+          `similarity=${similarity.toFixed(3)} (threshold: ${minSimilarity})`
+        );
         results.push({
           record: currentRecord,
           score: similarity,
           viaPointer: false,
         });
 
+        // Create pointer for future fast jumps (memoization)
         if (startingRecord.id !== currentRecord.id) {
           const pointer = await this.createPointer(
             startingRecord.id!,
@@ -93,10 +106,17 @@ export class RetrievalService {
             queryEmbedding,
             similarity
           );
-          if (pointer) pointersCreated++;
+          if (pointer) {
+            pointersCreated++;
+            console.log(
+              `[MemoryScan] Created pointer: ${startingRecord.id} -> ${currentRecord.id} ` +
+              `(relevance: ${similarity.toFixed(3)})`
+            );
+          }
         }
       }
 
+      // Check existing pointers at current position (O(1) jumps)
       const pointers = await this.repo.pointers.getPointersAtSource(currentId);
       for (const pointer of pointers) {
         const pointerSimilarity = cosineSimilarity(queryEmbedding, pointer.embedding);
@@ -104,6 +124,10 @@ export class RetrievalService {
         if (pointerSimilarity >= minSimilarity) {
           const targetRecord = await this.repo.records.getById(pointer.targetId);
           if (targetRecord && !visitedIds.has(targetRecord.id!)) {
+            console.debug(
+              `[MemoryScan] Pointer jump: ${currentId} -> ${pointer.targetId} ` +
+              `(similarity: ${pointerSimilarity.toFixed(3)})`
+            );
             results.push({
               record: targetRecord,
               score: pointerSimilarity,
@@ -117,12 +141,18 @@ export class RetrievalService {
         }
       }
 
+      // Move to previous record (sequential scan)
       const prevRecords = await this.repo.records.getBySession(sessionId, 1, currentId);
       currentId = prevRecords[0]?.id;
     }
 
     results.sort((a, b) => b.score - a.score);
     const topResults = results.slice(0, maxResults);
+
+    console.log(
+      `[MemoryScan] Complete: scanned=${recordsScanned}, found=${topResults.length}, ` +
+      `pointer_jumps=${pointerJumps}, pointers_created=${pointersCreated}`
+    );
 
     return { results: topResults, pointersCreated, recordsScanned, pointerJumps };
   }

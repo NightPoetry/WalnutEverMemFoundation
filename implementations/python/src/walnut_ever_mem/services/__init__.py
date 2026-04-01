@@ -106,7 +106,13 @@ class RetrievalService:
         return await self._execute_retrieval(context)
 
     async def _execute_retrieval(self, context: RetrievalContext) -> RetrievalResult:
-        """Execute the retrieval algorithm."""
+        """Execute the retrieval algorithm.
+        
+        This implements the memory scanning algorithm with:
+        1. Pairwise similarity comparison (query vs each record)
+        2. Pointer creation for future fast jumps
+        3. On-demand retrieval (no pre-computed indexes)
+        """
         results: list[SearchResult] = []
         records_scanned = 0
         pointer_jumps = 0
@@ -118,6 +124,11 @@ class RetrievalService:
 
         current_id = starting_record.id
         visited_ids: set[int] = set()
+
+        logger.info(
+            f"Starting memory scan for session {context.session_id}, "
+            f"query: '{context.query[:50]}...' (embedding dim: {len(context.embedding)})"
+        )
 
         while current_id is not None and len(results) < context.max_results:
             if current_id in visited_ids:
@@ -131,14 +142,21 @@ class RetrievalService:
 
             records_scanned += 1
 
+            # Pairwise similarity comparison: query ↔ record
             similarity = self._compute_similarity(context, current_record)
+            
             if similarity >= context.min_similarity:
+                logger.debug(
+                    f"Match found at record {current_id}: similarity={similarity:.3f} "
+                    f"(threshold: {context.min_similarity})"
+                )
                 results.append(SearchResult(
                     record=current_record,
                     score=similarity,
                     via_pointer=False,
                 ))
 
+                # Create pointer for future fast jumps (memoization)
                 if starting_record.id != current_record.id:
                     pointer = await self._create_pointer(
                         source_id=starting_record.id,
@@ -148,7 +166,12 @@ class RetrievalService:
                     )
                     if pointer:
                         pointers_created += 1
+                        logger.info(
+                            f"Created pointer {pointer.id}: {starting_record.id} -> {current_record.id} "
+                            f"(relevance: {similarity:.3f})"
+                        )
 
+            # Check existing pointers at current position (O(1) jumps)
             pointers = await self.repo.pointers.get_pointers_at_source(current_id)
 
             for pointer in pointers:
@@ -157,6 +180,10 @@ class RetrievalService:
                 if pointer_similarity >= context.min_similarity:
                     target_record = await self.repo.records.get_by_id(pointer.target_id)
                     if target_record and target_record.id not in visited_ids:
+                        logger.debug(
+                            f"Pointer jump: {current_id} -> {pointer.target_id} "
+                            f"(similarity: {pointer_similarity:.3f})"
+                        )
                         results.append(SearchResult(
                             record=target_record,
                             score=pointer_similarity,
@@ -167,6 +194,7 @@ class RetrievalService:
 
                         await self.repo.pointers.increment_access_count(pointer.id)
 
+            # Move to previous record (sequential scan)
             prev_records = await self.repo.records.get_by_session(
                 context.session_id,
                 limit=1,
@@ -176,6 +204,12 @@ class RetrievalService:
 
         results.sort(key=lambda r: r.score, reverse=True)
         results = results[:context.max_results]
+
+        logger.info(
+            f"Memory scan complete: scanned={records_scanned}, "
+            f"found={len(results)}, pointer_jumps={pointer_jumps}, "
+            f"pointers_created={pointers_created}"
+        )
 
         return RetrievalResult(
             results=results,
