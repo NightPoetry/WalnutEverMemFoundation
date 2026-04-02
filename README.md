@@ -12,11 +12,15 @@ A binary-logic based infinite context memory foundation for LLMs, serving as an 
 
 I've observed that many people may have developed impressive memory mechanisms. However, my goal is to accelerate the realization of AGI for the world—faster, and faster still. I hope to witness a transformative leap for all humanity within my lifetime.
 
+I aim to solve the problems of AGI, and use AGI to solve all of humanity's problems: diseases and disasters, resource depletion, mental breakdowns, gentle companionship, and beyond.
+
 I don't know if this approach has been explored before, or how effective it will be (I lack the large-scale data needed for thorough testing). Yet I choose to open source the final result of years of my thinking, hoping it may inspire others.
 
 If this work happens to inspire you, I hope you'll reach out and let me participate in your project. I want to contribute to AGI, and I need more resources to validate my hypotheses and conjectures.
 
 Some pursue AGI research for fame and money. I pursue AGI research, and for that, I need a certain amount of fame and money.
+
+My ultimate goal is to solve AGI, and use AGI to solve all of humanity's problems: diseases and disasters, resource depletion, mental collapse, gentle companionship, and beyond.
 
 **Contact**: 
 - Submit an issue on GitHub (I check them regularly)
